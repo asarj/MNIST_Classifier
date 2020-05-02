@@ -181,7 +181,9 @@ class MixtureOfExperts():
                   f'training accuracy = {total / len(self.dataset.y_train):.4f}, '
                   f'validation accuracy = {vacc:.4f}, '
                   f'learning rate = {self.learning_rate:.10f}')
-
+            for index, expert in enumerate(self.networks):
+                loss, acc = self.tf_sess.run([expert.loss, expert.accuracy], feed_dict=feed_dict)
+                print(f'\tExpert {index + 1}: training loss = {loss:.4f}, training acc = {acc:.4f}')
             # Early stopping
             if vacc > best:
                 best = vacc
@@ -199,6 +201,11 @@ class MixtureOfExperts():
         }
         acc = self.tf_sess.run(self.accuracy, feed_dict=feed_dict)
         print(f'test accuracy = {acc:.4f}')
+
+        # Evaluate performance of each expert
+        for index, expert in enumerate(self.networks):
+            loss, acc = self.tf_sess.run([expert.loss, expert.accuracy], feed_dict=feed_dict)
+            print(f'\tExpert {index + 1}: test loss = {loss:.4f}, test accuracy = {acc:.4f}')
 
 
 if __name__ == "__main__":
@@ -235,7 +242,7 @@ if __name__ == "__main__":
     learning_rate = 1e-3
     enable_session = True
     num_experts = 8
-    dynamic_lr = True
+    dynamic_lr = False
     shape = mnist.shape
     num_classes = mnist.num_classes
 
