@@ -87,7 +87,7 @@ class MixtureOfExperts():
 
         print("Building model...")
         concat = tf.concat([expert.logits for expert in self.networks], axis=1)
-        gate_activations = self.fc_layer(input=None, inputs=self.x,
+        gate_activations = self.fc_layer(input=None, inputs=concat,
                                          outputs=self.dataset.num_classes * (self.num_experts + 1),
                                          relu=False, is_linear=True)
         print("Gate Activation shape:", gate_activations.shape)
