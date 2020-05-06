@@ -8,6 +8,17 @@ import matplotlib.pyplot as plt
 
 
 class CNN():
+    """
+    Class for building and training a CNN model on an image dataset (in this case, meant for MNIST)
+    Performs a LeNet-based model construction that goes as follows:
+    convolutional layer -> maxpool -> convolutional layer -> maxpool -> flattened layer -> fully connected layer
+    -> fully connected layer -> logits -> softmax/cross entropy
+    with Adam Optimizer
+
+    Implemented in this classifier:
+    - Early stopping
+    - Learning rate estimator
+    """
 
     tf_sess = None
     model = None
@@ -19,6 +30,22 @@ class CNN():
 
     def __init__(self, dataset:ImageDataset, load_dataset=True, num_epochs=100, learning_rate=0.001,
                  enable_session=False, dynamic_lr=True, shape=None, num_classes=None):
+        """
+        Constructor for building the CNN classifier
+        :param ImageDataset dataset: a fully constructed ImageDataset object with batch iterator set up
+        :param bool load_dataset: boolean flag to determine whether to load the dataset object passed in
+                                  set to False if using this model with something like a mixture of experts or ensemble
+        :param int num_epochs: number of epochs to use for BOTH finding optimal learning rate and training the model
+        :param float learning_rate: default/starting learning rate to train the model on. This value will change during
+                              model construction if the dynamic_lr flag is set to True
+        :param bool enable_session: boolean flag to determine whether to start a session with this model
+                                    set to False if using this model with something like a mixture of experts or
+                                    ensemble
+        :param bool dynamic_lr: boolean flag to determine whether to find the optimal learning rate before training
+                                the model
+        :param tuple shape: hard-coded shape of the object if the flag load_dataset is set to false
+        :param int num_classes: hard-coded number of labels of the object if the flag load_dataset is set to false
+        """
 
         if enable_session:
             self.tf_sess = tf.Session()
@@ -35,6 +62,21 @@ class CNN():
 
     def build_model(self, epochs=50, learning_rate=0.001,
                     enable_dynamic_lr=True, dataset_loaded=True, shape=None, num_classes=None):
+        """
+        Builds the model layers and finds the optimal learning rate for training if specified
+        :param int epochs: number of epochs to use for finding optimal learning rate
+        :param float learning_rate: starting learning rate to train the model on. This value will change during
+                              model construction if the dynamic_lr flag is set to True
+        :param bool enable_dynamic_lr: boolean flag to determine whether to find the optimal learning rate before
+                                       training the model
+        :param bool dataset_loaded: boolean flag to determine whether to load the dataset object passed in. Set to
+                                    False if using this model with something like a mixture of experts or ensemble
+                                    (though this would have been set in the constructor anyway)
+        :param tuple shape: hard-coded shape of the object if the flag dataset_loaded is set to false
+        :param int num_classes: hard-coded number of labels of the object if the flag dataset_loaded is set to false
+        :return: None, model is constructed accordingly
+        """
+
         print("Building model...")
         x, y, cross_entropy, correct = None, None, None, None
         if dataset_loaded:
@@ -125,6 +167,15 @@ class CNN():
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
 
     def train_model(self, epochs:int, limit=6):
+        """
+        Trains the model and evaluates the train and valdiation accuracy with every epoch. If early stopping kicks
+        in, the entire test set is evaluated accordingly
+
+        :param int epochs: number of epochs to use for training the model
+        :param int limit: the tolerance limit for determining whether to apply early stopping during training
+        :return: None, model stats are shown accordingly
+        """
+
         print("Training model...")
         self.tf_sess.run(tf.global_variables_initializer())
 
@@ -181,6 +232,16 @@ class CNN():
         print(f'test accuracy = {acc:.4f}')
 
     def get_optimal_learning_rate(self, epochs=50, learning_rate=1e-5, plot_charts=False):
+        """
+        Finds the optimal learning rate of the model using gradient descent before using this value in the model's
+        optimizer
+
+        :param int epochs: number of epochs to use for finding optimal learning rate
+        :param float learning_rate: starting learning rate to train the model on
+        :param bool plot_charts: boolean flag to determine whether to display the resulting charts for finding the
+                                 optimal learning rate
+        :return: float the optimal learning rate
+        """
 
         print("Finding optimal learning rate...")
         self.tf_sess.run(tf.global_variables_initializer())
@@ -229,13 +290,87 @@ class CNN():
         print()
         return start
 
-    def create_weights(self, shape:list, stddev=0.05)->tf.Variable:
+    def create_weights(self, shape: list, stddev=0.05) -> tf.Variable:
+        """
+        Constructs the weights in the form of a TensorFlow variable
+
+        :param shape: the shape of the weights variable
+        :param stddev: the standard deviation for the weights
+        :return: tf.Variable the weights in a TensorFlow variable
+        """
+
         return tf.Variable(tf.truncated_normal(shape=shape, mean=0, stddev=stddev))
 
-    def create_biases(self, size:int):
+    def create_biases(self, size: int) -> tf.Variable:
+        """
+        Constructs the weights in the form of a TensorFlow variable
+
+        :param size: the number of zeros to hold the biases
+        :return: tf.Variable the biases in a TensorFlow variable
+        """
+
         return tf.Variable(tf.zeros([size]))
 
+    def conv_layer(self, input, input_channels, filters, filter_size) -> tf.nn.relu:
+        """
+        Creates a convolutional layer for the model to feed into
+
+        :param input: the input for the model layer
+        :param input_channels: the number of channels the input contains
+        :param filters: the filters for passing into the convolutional layer
+        :param filter_size: the number of filters
+        :return: tf.nn.relu layer, the constructed convolutional layer
+        """
+
+        weights = self.create_weights(shape=[filter_size, filter_size, input_channels, filters])
+        biases = self.create_biases(filters)
+
+        layer = tf.nn.conv2d(input=input, filter=weights, strides=[1, 1, 1, 1], padding='VALID')
+        layer += biases
+
+        layer = tf.nn.relu(layer)
+
+        return layer
+
+    def pool(self, layer: tf.nn.conv2d, ksize: list, strides: list, padding='VALID') -> tf.nn.max_pool:
+        """
+        Creates a pooling layer for the model
+
+        :param tf.nn.conv2d layer: the layer to feed into the max_pool layer
+        :param list ksize: the kernel size of the pooling layer
+        :param list strides: the strides for the pooling layer
+        :param str padding: the padding to specify for the pooling layer
+        :return: tf.nn.max_pool the constructed max pool layer
+        """
+
+        return tf.nn.max_pool(layer, ksize=ksize, strides=strides, padding=padding)
+
+    def flatten_layer(self, layer: tf.nn.conv2d) -> tf.nn.conv2d:
+        """
+        Flattens a convolutional layer
+        :param tf.nn.conv2d layer: the convolutional layer to flatten
+        :return: tf.nn.conv2d the flattened layer
+        """
+
+        shape = layer.get_shape()
+        features = shape[1:4].num_elements()
+        layer = tf.reshape(layer, [-1, features])
+
+        return layer
+
     def fc_layer(self, input, inputs, outputs, relu=True, is_linear=False):
+        """
+        Creates a fully connected layer for the model. Doubles as a method to construct a linear layer
+        if the is_linear flag is set to true
+
+        :param input: the input to feed into the layer if creating a fully connected layer
+        :param inputs: the numpy array to create the weights with and perform linear layer construction if
+                       the is_linear flag is set to True
+        :param outputs: the numpy array to create the weights and biases
+        :param relu: boolean flag to determine whether to apply a relu to this model
+        :param is_linear: boolean flag to determine whether to treat this layer as a linear layer
+        :return: the constructed layer
+        """
         layer = None
 
         if is_linear:
@@ -257,30 +392,12 @@ class CNN():
 
         return layer
 
-    def pool(self, layer:tf.nn.conv2d, ksize:list, strides:list, padding='VALID'):
-        return tf.nn.max_pool(layer, ksize=ksize, strides=strides, padding=padding)
-
-    def flatten_layer(self, layer:tf.nn.conv2d):
-        shape = layer.get_shape()
-        features = shape[1:4].num_elements()
-        layer = tf.reshape(layer, [-1, features])
-
-
-        return layer
-
-    def conv_layer(self, input, input_channels, filters, filter_size):
-        weights = self.create_weights(shape=[filter_size, filter_size, input_channels, filters])
-        biases = self.create_biases(filters)
-
-        layer = tf.nn.conv2d(input=input, filter=weights, strides=[1, 1, 1, 1], padding='VALID')
-        layer += biases
-
-        layer = tf.nn.relu(layer)
-
-        return layer
-
 
 if __name__ == "__main__":
+    """
+    Main method for testing the CNN model
+    """
+
     warnings.filterwarnings("ignore")
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -297,7 +414,7 @@ if __name__ == "__main__":
     learning_rate = 1e-3
     enable_session = True
     dynamic_lr = True
-    shape = mnist.num_classes
+    shape = mnist.shape
     num_classes = mnist.num_classes
 
     print("Number of training examples =", n_train)

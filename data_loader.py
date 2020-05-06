@@ -10,6 +10,11 @@ import os
 import warnings
 
 class ImageDataset():
+    """
+    Class for holding image datasets that are loaded in manually
+    Contains all batch preprocessing features as well
+    """
+
     train = None
     x_train = None
     y_train = None
@@ -73,7 +78,7 @@ class ImageDataset():
         """
         Populates the train, test, and validation global variables with raw data from the pickled files
 
-        :param directory: the path to the dataset containing pickle files
+        :param str directory: the path to the dataset containing pickle files
         :return: None, the class variables are populated accordingly
         """
 
@@ -94,17 +99,16 @@ class ImageDataset():
         self.x_valid, self.y_valid = self.validation['features'], self.validation['labels']
         self.x_valid = self.x_valid.astype(np.float32)
 
-    def setup_batch_iterator(self, features, labels):
+    def setup_batch_iterator(self, features:np.ndarray, labels:np.ndarray) -> None:
         """
         Constructs a TensorFlow dataset from the and sets up the batch iterator
 
-        :param features:
-        :param labels:
-        :return:
+        :param np.ndarray features: the images of the dataset
+        :param np.ndarray labels: the labels for each feature
+        :return: None, the batch iterator is constructed from tensors and stored in class variables
         """
+
         print("Setting up batch iterator...")
-        # data_x = tf.data.Dataset.from_tensor_slices(features)
-        # data_y = tf.data.Dataset.from_tensor_slices(labels)
 
         data = tf.data.Dataset.from_tensor_slices((features, labels))
         data = data.shuffle(len(self.y_train), reshuffle_each_iteration=True).batch(self.batch_size)
@@ -113,8 +117,14 @@ class ImageDataset():
         self.train_init = iterator.make_initializer(data)
         self.x_batch, self.y_batch = iterator.get_next()
 
-    def display_one(self, a, title1 = "Original"):
-        """Helper function for displaying an image"""
+    def display_one(self, a:np.ndarray, title1="Original") -> None:
+        """
+        Helper function for displaying an image
+
+        :param np.ndarray a: the image to display
+        :param str title1: the title of the image to display when plotting
+        :return: None, the image is rendered and shown
+        """
 
         plt.imshow(a)
         plt.title(title1)
@@ -122,8 +132,16 @@ class ImageDataset():
         plt.yticks([])
         plt.show()
 
-    def display_two(self, a, b, title1="Original", title2="Edited"):
-        """Helper function for displaying two images, usually for comparing before and after transformations"""
+    def display_two(self, a:np.ndarray, b:np.ndarray, title1="Original", title2="Edited") -> None:
+        """
+        Helper function for displaying two images, usually for comparing before and after transformations
+
+        :param np.ndarray a: the "before" image to display (should be the original image before any preprocessing
+        :param np.ndarray b: the "after" image to display (after applying any transformations)
+        :param str title1: the title of the "before" image to display when plotting
+        :param str title2: the title of the "after" image to display when plotting
+        :return: None, both images are rendered and shown
+        """
 
         plt.subplot(121)
         plt.imshow(a)
@@ -137,15 +155,26 @@ class ImageDataset():
         plt.yticks([])
         plt.show()
 
-    def preprocess(self, features:np.ndarray)->np.ndarray:
-        """Main function for preprocessing images"""
+    def preprocess(self, features:np.ndarray) -> np.ndarray:
+        """
+        Main function for preprocessing images
+
+        :param np.ndarray features: the batch of images to perform preprocessing on
+        :return: np.ndarray the modified batch of features
+        """
 
         for i, img in (enumerate(features)):
             img = self.preprocess_improved(img)
             features[i] = img
         return features
 
-    def preprocess_improved(self, image:np.ndarray):
+    def preprocess_improved(self, image:np.ndarray) -> np.ndarray:
+        """
+        Main function for preprocessing images
+
+        :param np.ndarray image: the image to apply a random transformation on
+        :return: np.ndarray image the modified image
+        """
 
         choice = randint(0, 3)
         if choice == 0:
@@ -159,20 +188,26 @@ class ImageDataset():
 
         return self.normalize_image_pixels(image)
 
-    def preprocess_normalize_only(self, features:np.ndarray):
+    def preprocess_normalize_only(self, features:np.ndarray) -> np.ndarray:
+        """
+        Main function for normalizing images only
+        :param np.ndarray features: the batch of images to perform preprocessing on
+        :return: np.ndarray the modified batch of features
+        """
+
         for i, img in (enumerate(features)):
-            # print("Before ", img[0][0])
-            # self.display_one(img)
-            # img = self.random_image_augment(img)
             img = self.normalize_image_pixels(img)
-            # img = self.preprocess_improved(img)
             features[i] = img
-            # print("After ", img[0][0])
-            # self.display_one(img)
+
         return features
 
-    def perform_hist_eq(self, image: np.ndarray):
-        """Takes in an image and performs histogram equalization -> improves contrast"""
+    def perform_hist_eq(self, image: np.ndarray) -> np.ndarray:
+        """
+        Takes in an image and performs histogram equalization -> improves contrast
+
+        :param np.ndarray image: the image to apply histogram equalization on
+        :return: np.ndarray image the modified image
+        """
 
         R, G, B = cv2.split(image.astype(np.uint8))
 
@@ -184,8 +219,16 @@ class ImageDataset():
 
         return image.astype(np.float32)
 
-    def translate(self, image, height=32, width=32, max_trans=5):
-        """Applies a random translation in height and/or width"""
+    def translate(self, image, height=32, width=32, max_trans=5) -> np.ndarray:
+        """
+        Applies a random translation in height and/or width
+
+        :param np.ndarray image: the image to apply random translation on
+        :param int height: the height of the image
+        :param int width: the width of the image
+        :param int max_trans: a max value to shift the height and width by
+        :return: np.ndarray image the modified image
+        """
 
         translate_x = max_trans * np.random.uniform() - max_trans / 2
         translate_y = max_trans * np.random.uniform() - max_trans / 2
@@ -193,26 +236,28 @@ class ImageDataset():
         trans = cv2.warpAffine(image, translation_mat, (height, width))
         return trans
 
-    def gaussian(self, image, ksize=(11, 11), border=0):
+    def gaussian(self, image, ksize=(11, 11), border=0) -> np.ndarray:
+        """
+        Applies Gaussian Blur to the image
+
+        :param np.ndarray image: the image to apply Gaussian Blur on
+        :param tuple ksize: a tuple of 2 ints that describes the kernel size
+        :param int border: value to apply a border on the image
+        :return: np.ndarray image the modified image
+        """
+
         return cv2.GaussianBlur(image, ksize, border)
 
-    def translate(self, image, height=32, width=32, max_trans=5):
-        """Applies a random translation in height and/or width"""
+    def normalize_image_pixels(self, image:np.ndarray) -> np.ndarray:
+        """
+        Function to normalize the image pixels. Assumes that the np.ndarray passed in contains values
+        from [0,255] and normalizes it down to a value that is [0, 1)
 
-        translate_x = max_trans * np.random.uniform() - max_trans / 2
-        translate_y = max_trans * np.random.uniform() - max_trans / 2
-        translation_mat = np.float32([[1, 0, translate_x], [0, 1, translate_y]])
-        trans = cv2.warpAffine(image, translation_mat, (height, width))
-        return trans
+        Revised to preprocess based on zero mean/unit variance, old code commented out
 
-    def gaussian(self, image, ksize=(11,11), border=0):
-        return cv2.GaussianBlur(image, ksize, border)
-
-    def normalize_image_pixels(self, image:np.ndarray)->np.ndarray:
-        """Function to normalize the image pixels. Assumes that the np.ndarray passed in contains values
-            from [0,255] and normalizes it down to a value that is [0, 1)
-
-            Revised to preprocess based on zero mean/unit variance, old code commented out"""
+        :param np.ndarray image: the image to apply normalization on
+        :return: np.ndarray image the modified image
+        """
 
         # for normalizing pixels
         # return np.divide(image, 255.0)
@@ -224,10 +269,16 @@ class ImageDataset():
 
 
 if __name__ == "__main__":
+    """
+    Main method for testing the data loader
+    """
+
+    # Ignore warnings
     warnings.filterwarnings("ignore")
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
+    # Testing GTSRB
     print("Testing GTSRB...")
     path = "GTSRB/"
     gtsrb = ImageDataset(path)
@@ -245,6 +296,7 @@ if __name__ == "__main__":
 
     print()
 
+    # Testing MNIST
     print("Testing MNIST...")
     mnist = ImageDataset(type="MNIST")
     n_train = len(mnist.x_train)

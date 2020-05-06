@@ -6,9 +6,21 @@ from data_loader import ImageDataset
 from datetime import datetime
 import matplotlib.pyplot as plt
 from mnist_cnn_classifier import CNN as MNISTLeNet
+import tensorflow.contrib.slim as slim
 
 
 class MixtureOfExperts():
+    """
+   Class for building and training a mixture of experts model on an image dataset
+   Performs a basic model construction that goes as follows:
+   -> logits -> softmax/cross entropy
+   with Adam Optimizer
+
+   Implemented in this classifier:
+   - Early stopping
+   - Learning rate estimator
+   """
+
     tf_sess = None
     model = None
     dataset = None
@@ -22,6 +34,23 @@ class MixtureOfExperts():
 
     def __init__(self, dataset: ImageDataset, num_experts=4, load_dataset=True, num_epochs=100, learning_rate=0.001,
                  enable_session=False, dynamic_lr=True, shape=None, num_classes=None):
+        """
+        Constructor for building the CNN classifier
+        :param ImageDataset dataset: a fully constructed ImageDataset object with batch iterator set up
+        :param int num_experts: the number of experts to create the model with
+        :param bool load_dataset: boolean flag to determine whether to load the dataset object passed in
+                                  set to False if using this model with something like a mixture of experts or ensemble
+        :param int num_epochs: number of epochs to use for BOTH finding optimal learning rate and training the model
+        :param float learning_rate: default/starting learning rate to train the model on. This value will change during
+                              model construction if the dynamic_lr flag is set to True
+        :param bool enable_session: boolean flag to determine whether to start a session with this model
+                                    set to False if using this model with something like a mixture of experts or
+                                    ensemble
+        :param bool dynamic_lr: boolean flag to determine whether to find the optimal learning rate before training
+                                the model
+        :param tuple shape: hard-coded shape of the object if the flag load_dataset is set to false
+        :param int num_classes: hard-coded number of labels of the object if the flag load_dataset is set to false
+        """
 
         if enable_session:
             self.tf_sess = tf.Session()
@@ -30,8 +59,8 @@ class MixtureOfExperts():
             self.dataset = dataset
 
         # Make sure the number of experts passed in is greater than 2
-        # This is bad practice, will change to exception later
-        assert num_experts >= 2
+        if num_experts < 2:
+            raise Exception("Mixture of Experts model needs 2 or more experts!")
 
         self.num_inputs = self.dataset.x_train.shape[1]
         self.num_experts = num_experts
@@ -46,6 +75,20 @@ class MixtureOfExperts():
 
     def build_model(self, epochs=50, learning_rate=0.001,
                     enable_dynamic_lr=True, dataset_loaded=True, shape=None, num_classes=None):
+        """
+        Builds the model layers and finds the optimal learning rate for training if specified
+        :param int epochs: number of epochs to use for finding optimal learning rate
+        :param float learning_rate: starting learning rate to train the model on. This value will change during
+                              model construction if the dynamic_lr flag is set to True
+        :param bool enable_dynamic_lr: boolean flag to determine whether to find the optimal learning rate before
+                                       training the model
+        :param bool dataset_loaded: boolean flag to determine whether to load the dataset object passed in. Set to
+                                    False if using this model with something like a mixture of experts or ensemble
+                                    (though this would have been set in the constructor anyway)
+        :param tuple shape: hard-coded shape of the object if the flag dataset_loaded is set to false
+        :param int num_classes: hard-coded number of labels of the object if the flag dataset_loaded is set to false
+        :return: None, model is constructed accordingly
+        """
 
         with tf.variable_scope('moe', reuse=tf.AUTO_REUSE) as scope:
             self.x = tf.placeholder(tf.float32, [None, self.num_inputs], name='x')
@@ -118,6 +161,19 @@ class MixtureOfExperts():
         self.predict = tf.nn.softmax(self.logits)
 
     def fc_layer(self, input, inputs, outputs, relu=True, is_linear=False):
+        """
+        Creates a fully connected layer for the model. Doubles as a method to construct a linear layer
+        if the is_linear flag is set to true
+
+        :param input: the input to feed into the layer if creating a fully connected layer
+        :param inputs: the numpy array to create the weights with and perform linear layer construction if
+                       the is_linear flag is set to True
+        :param outputs: the numpy array to create the weights and biases
+        :param relu: boolean flag to determine whether to apply a relu to this model
+        :param is_linear: boolean flag to determine whether to treat this layer as a linear layer
+        :return: the constructed layer
+        """
+
         layer = None
 
         if is_linear:
@@ -140,12 +196,36 @@ class MixtureOfExperts():
         return layer
 
     def create_weights(self, shape: list, stddev=0.05) -> tf.Variable:
+        """
+        Constructs the weights in the form of a TensorFlow variable
+
+        :param shape: the shape of the weights variable
+        :param stddev: the standard deviation for the weights
+        :return: tf.Variable the weights in a TensorFlow variable
+        """
+
         return tf.Variable(tf.truncated_normal(shape=shape, mean=0, stddev=stddev))
 
-    def create_biases(self, size: int):
+    def create_biases(self, size: int) -> tf.Variable:
+        """
+        Constructs the weights in the form of a TensorFlow variable
+
+        :param size: the number of zeros to hold the biases
+        :return: tf.Variable the biases in a TensorFlow variable
+        """
+
         return tf.Variable(tf.zeros([size]))
 
     def train_model(self, epochs: int, limit=6):
+        """
+        Trains the model and evaluates the train and valdiation accuracy with every epoch. If early stopping kicks
+        in, the entire test set is evaluated accordingly
+
+        :param int epochs: number of epochs to use for training the model
+        :param int limit: the tolerance limit for determining whether to apply early stopping during training
+        :return: None, model stats are shown accordingly
+        """
+
         print("Training model...")
         self.tf_sess.run(tf.global_variables_initializer())
 
@@ -206,6 +286,10 @@ class MixtureOfExperts():
 
 
 if __name__ == "__main__":
+    """
+    Main method for testing the Mixture of Experts model
+    """
+
     warnings.filterwarnings("ignore")
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
