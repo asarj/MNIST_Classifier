@@ -11,15 +11,16 @@ import tensorflow.contrib.slim as slim
 
 class MixtureOfExperts():
     """
-   Class for building and training a mixture of experts model on an image dataset
-   Performs a basic model construction that goes as follows:
-   -> logits -> softmax/cross entropy
-   with Adam Optimizer
+    Class for building and training a mixture of experts model on an image dataset
+    Performs a basic model construction that goes as follows:
+    logits from all experts -> gating/activations and distributions -> MoE logits -> softmax/cross entropy
+    with Adam Optimizer
 
-   Implemented in this classifier:
-   - Early stopping
-   - Learning rate estimator
-   """
+    Implemented in this classifier:
+    - Early stopping
+    - Learning rate estimator
+    - L2 regularization
+    """
 
     tf_sess = None
     model = None
