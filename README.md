@@ -4,7 +4,7 @@ This repository contains my work as part of my ongoing research efforts with the
 
 ## Dataset
 
-The dataset used for the tasks was the Modified National Institute of Standards and Technology database (MNIST) handwritten digits dataset which can be downloaded by having the import statement `from tensorflow.examples.tutorials.mnist import input_data`
+The dataset used for the tasks was the Modified National Institute of Standards and Technology database (MNIST) handwritten digits dataset which can be downloaded by including the import statement `from tensorflow.examples.tutorials.mnist import input_data`
 
 ## Python Packages
 
