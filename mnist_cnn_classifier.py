@@ -403,7 +403,7 @@ if __name__ == "__main__":
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     print("TensorFlow Version: ", tf.__version__)
 
-    mnist = ImageDataset(type='MNIST')
+    mnist = ImageDataset(type='TF_MNIST')
     n_train = len(mnist.x_train)
     n_valid = len(mnist.x_valid)
     n_test = len(mnist.x_test)

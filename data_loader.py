@@ -39,13 +39,17 @@ class ImageDataset():
         Constructor for building the TensorFlow dataset
 
         Loads the train, test, and validation pickle files from the specified directory and applies
-        normalization on the dataset, followed by a setup of the tensorflow batch iterator
+        normalization on the dataset, followed by a setup of either a tensorflow or pytorch batch iterator
 
         :param str dir: the path to the dataset containing pickle files
         :param str type: the default tensorflow dataset to load in (only supports MNIST)
         """
+
+        batch_iter_load_type = None
+
         if type is not None:
-            if type == 'MNIST':
+            batch_iter_load_type = type.split("_")[0]
+            if type == 'TF_MNIST':
                 mnist = input_data.read_data_sets('data/MNIST/', one_hot=True)
                 self.x_train = mnist.train.images
                 self.y_train = mnist.train.labels
@@ -62,17 +66,41 @@ class ImageDataset():
                 self.x_test = mnist.test.images
                 self.y_test = mnist.test.labels
                 self.x_test = self.x_test.astype(np.float32)
+            elif type == "TORCH_MNIST":
+                pass
+            else:
+                raise Exception("Loading this dataset is not currently supported by the batch iterator")
+
+            print("Preprocessing train data...")
+            self.normalize_image_pixels(self.x_train)
+            print("Preprocessing test data...")
+            self.normalize_image_pixels(self.x_test)
+            print("Preprocessing validation data...")
+            self.normalize_image_pixels(self.x_valid)
+
+            if batch_iter_load_type == "TF":
+                self.setup_tf_batch_iterator(self.x_train, self.y_train)
+            elif batch_iter_load_type == "TORCH":
+                self.setup_torch_batch_iterator(self.x_train, self.y_train)
+            else:
+                raise Exception("Module not supported for this batch iterator...")
 
         elif dir is not None:
+            batch_iter_load_type = dir.split("_")[0]
             self.load(dir)
+            print("Preprocessing train data...")
+            self.normalize_image_pixels(self.x_train)
+            print("Preprocessing test data...")
+            self.normalize_image_pixels(self.x_test)
+            print("Preprocessing validation data...")
+            self.normalize_image_pixels(self.x_valid)
 
-        print("Preprocessing train data...")
-        self.normalize_image_pixels(self.x_train)
-        print("Preprocessing test data...")
-        self.normalize_image_pixels(self.x_test)
-        print("Preprocessing validation data...")
-        self.normalize_image_pixels(self.x_valid)
-        self.setup_batch_iterator(self.x_train, self.y_train)
+            if batch_iter_load_type == "TF":
+                self.setup_tf_batch_iterator(self.x_train, self.y_train)
+            elif batch_iter_load_type == "TORCH":
+                self.setup_torch_batch_iterator(self.x_train, self.y_train)
+            else:
+                raise Exception("Module not supported for this batch iterator...")
 
     def load(self, directory:str) -> None:
         """
@@ -99,9 +127,18 @@ class ImageDataset():
         self.x_valid, self.y_valid = self.validation['features'], self.validation['labels']
         self.x_valid = self.x_valid.astype(np.float32)
 
-    def setup_batch_iterator(self, features:np.ndarray, labels:np.ndarray) -> None:
+    def setup_torch_batch_iterator(self, features:np.ndarray, labels:np.ndarray):
         """
-        Constructs a TensorFlow dataset from the and sets up the batch iterator
+        Constructs a PyTorch dataset from the features and labels and sets up the batch iterator
+
+        :param np.ndarray features: the images of the dataset
+        :param np.ndarray labels: the labels for each feature
+        :return: None, the batch iterator is constructed from tensors and stored in class variables
+        """
+
+    def setup_tf_batch_iterator(self, features:np.ndarray, labels:np.ndarray) -> None:
+        """
+        Constructs a TensorFlow dataset from the features and labels and sets up the batch iterator
 
         :param np.ndarray features: the images of the dataset
         :param np.ndarray labels: the labels for each feature
@@ -298,7 +335,7 @@ if __name__ == "__main__":
 
     # Testing MNIST
     print("Testing MNIST...")
-    mnist = ImageDataset(type="MNIST")
+    mnist = ImageDataset(type="TF_MNIST")
     n_train = len(mnist.x_train)
     n_valid = len(mnist.x_valid)
     n_test = len(mnist.x_test)

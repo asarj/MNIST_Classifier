@@ -313,7 +313,7 @@ if __name__ == "__main__":
     # num_classes = gtsrb.num_classes
 
     # Trying MNIST now
-    mnist = ImageDataset(type='MNIST')
+    mnist = ImageDataset(type='TF_MNIST')
     n_train = len(mnist.x_train)
     n_valid = len(mnist.x_valid)
     n_test = len(mnist.x_test)

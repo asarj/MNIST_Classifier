@@ -130,48 +130,82 @@ class MixtureOfExperts():
             )
 
         print("Building MoE model...")
-        concat = tf.concat([expert.logits for expert in self.networks], axis=1)
-        # gate_activations = self.fc_layer(input=None, inputs=self.x,
-        #                                  outputs=self.dataset.num_classes * (self.num_experts + 1),
-        #                                  relu=False, is_linear=True)
-        # print("Gate Activation shape:", gate_activations.shape)
-        #
-        # gating_distribution = tf.nn.softmax(tf.reshape(gate_activations, [-1, self.num_experts + 1]))
-        # print("Gate Distribution shape:", gating_distribution.shape)
-        #
-        # expert_activations = self.fc_layer(input=None, inputs=self.x,
-        #                                    outputs=self.dataset.num_classes * self.num_experts,
-        #                                    relu=False, is_linear=True)
-        # print("Expert Activation shape:", expert_activations.shape)
-        #
-        # expert_distribution = tf.nn.sigmoid(tf.reshape(expert_activations, [-1, self.num_experts]))
-        # print("Expert Distribution shape:", expert_distribution.shape)
-        #
-        # final_probabilities = tf.reduce_sum(gating_distribution[:, :self.num_experts] * expert_distribution, 1)
-        # print("Final probabilities shape: ", final_probabilities.shape)
 
-        gate_activations = slim.fully_connected(
-            self.x,
-            self.dataset.num_classes * (self.num_experts + 1),
-            activation_fn=None,
-            biases_initializer=None,
-            weights_regularizer=slim.l2_regularizer(1e-8),
-            scope="gates")
-        expert_activations = slim.fully_connected(
-            self.x,
-            self.dataset.num_classes * self.num_experts,
-            activation_fn=None,
-            weights_regularizer=slim.l2_regularizer(1e-8),
-            scope="moe")
+        gate_activations = self.fc_layer(input=None, inputs=self.x,
+                                         outputs=self.dataset.num_classes * (self.num_experts + 1),
+                                         relu=False, is_linear=True)
+        print("Gate Activation shape:", gate_activations.shape)
 
-        gating_distribution = tf.nn.softmax(
-            tf.reshape(gate_activations, [-1, self.num_experts + 1]))  # (Batch * #Labels) x (num_mixtures + 1)
-        expert_distribution = tf.nn.sigmoid(
-            tf.reshape(expert_activations, [-1, self.num_experts]))  # (Batch * #Labels) x num_mixtures
+        gating_distribution = tf.nn.softmax(tf.reshape(gate_activations, [-1, self.num_experts + 1]))
+        gating_distribution = tf.reshape(gating_distribution, [-1, self.dataset.num_classes, self.num_experts + 1])
+        print("Gate Distribution shape:", gating_distribution.shape)
 
-        final_probabilities_by_class_and_batch = tf.reduce_sum(gating_distribution[:, :self.num_experts] * expert_distribution, 1)
-        final_probabilities = tf.reshape(final_probabilities_by_class_and_batch,
-                                         [-1, self.dataset.num_classes])
+        experts = list()
+        for x in range(self.num_experts):
+            lin1 = self.fc_layer(input=None, inputs=self.x, outputs=512, is_linear=True)
+            lin2 = self.fc_layer(input=None, inputs=lin1, outputs=256, is_linear=True)
+            lin3 = self.fc_layer(input=None, inputs=lin2, outputs=64, is_linear=True)
+            logits = self.fc_layer(input=None, inputs=lin3, outputs=10, is_linear=True)
+            experts.append(logits)
+
+        experts = tf.stack(experts, axis=1)
+        expert_activations = self.fc_layer(input=None, inputs=experts,
+                                           outputs=self.dataset.num_classes * self.num_experts,
+                                           relu=False, is_linear=True)
+        print("Expert Activation shape:", expert_activations.shape)
+
+        expert_distribution = tf.nn.sigmoid(tf.reshape(experts, [-1, self.num_experts]))
+        expert_distribution = tf.reshape(expert_distribution, [-1, self.dataset.num_classes, self.num_experts])
+        print("Expert Distribution shape:", expert_distribution.shape)
+
+        logits_for_experts = tf.unstack(expert_distribution, self.num_experts, -1)
+        self.expert_loss = [
+            tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logit, labels=self.y))
+            for logit in logits_for_experts
+        ]
+        self.expert_accuracy = [
+            tf.reduce_mean(tf.cast(tf.equal(tf.argmax(logit, axis=1), tf.argmax(self.y, axis=1)), tf.float32))
+            for logit in logits_for_experts
+        ]
+
+        # gate_activations = slim.fully_connected(
+        #     self.x,
+        #     self.dataset.num_classes * (self.num_experts + 1),
+        #     activation_fn=None,
+        #     biases_initializer=None,
+        #     weights_regularizer=slim.l2_regularizer(1e-8),
+        #     scope="moe")
+        # # expert_activations = slim.fully_connected(
+        # #     experts,
+        # #     self.dataset.num_classes * self.num_experts,
+        # #     activation_fn=None,
+        # #     weights_regularizer=slim.l2_regularizer(1e-8),
+        # #     scope="moe")
+        #
+        # gating_distribution = tf.nn.softmax(
+        #     tf.reshape(gate_activations, [-1, self.num_experts + 1]))  # (Batch * #Labels) x (num_mixtures + 1)
+        # gating_distribution = tf.reshape(gating_distribution, [-1, self.dataset.num_classes, self.num_experts + 1])
+        #
+        # expert_distribution = tf.nn.sigmoid(
+        #     tf.reshape(experts, [-1, self.num_experts]))  # (Batch * #Labels) x num_mixtures
+        # expert_distribution = tf.reshape(expert_distribution, [-1, self.dataset.num_classes, self.num_experts])
+        #
+        # logits_for_experts = tf.unstack(expert_distribution, self.num_experts, -1)
+        # self.expert_loss = [
+        #     tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logit, labels=self.y))
+        #     for logit in logits_for_experts
+        # ]
+        # self.expert_accuracy = [
+        #     tf.reduce_mean(tf.cast(tf.equal(tf.argmax(logit, axis=1), tf.argmax(self.y, axis=1)), tf.float32))
+        #     for logit in logits_for_experts
+        # ]
+        #
+        # final_probabilities_by_class_and_batch = tf.reduce_sum(gating_distribution[:, :, :self.num_experts] * expert_distribution, 1)
+        # final_probabilities = tf.reshape(final_probabilities_by_class_and_batch,
+        #                                  [-1, self.dataset.num_classes])
+
+        final_probabilities = tf.reduce_sum(gating_distribution[:, :, :self.num_experts] * expert_distribution, -1)
+        print("Final probabilities shape: ", final_probabilities.shape)
 
         self.logits = tf.reshape(final_probabilities, [-1, self.dataset.num_classes])
         print("Logits shape:", self.logits.shape)
@@ -304,8 +338,8 @@ class MixtureOfExperts():
         print(f'test accuracy = {acc:.4f}')
 
         # Evaluate performance of each expert
-        for index, expert in enumerate(self.networks):
-            loss, acc = self.tf_sess.run([expert.loss, expert.accuracy], feed_dict=feed_dict)
+        for index, (e_loss, e_accuracy) in enumerate(zip(self.expert_loss, self.expert_accuracy)):
+            loss, acc = self.tf_sess.run([e_loss, e_accuracy], feed_dict=feed_dict)
             print(f'\tExpert {index + 1}: test loss = {loss:.4f}, test accuracy = {acc:.4f}')
 
 
@@ -336,7 +370,7 @@ if __name__ == "__main__":
     # num_classes = gtsrb.num_classes
 
     # Trying MNIST now
-    mnist = ImageDataset(type='MNIST')
+    mnist = ImageDataset(type='TF_MNIST')
     n_train = len(mnist.x_train)
     n_valid = len(mnist.x_valid)
     n_test = len(mnist.x_test)
