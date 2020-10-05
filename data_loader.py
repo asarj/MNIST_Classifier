@@ -8,6 +8,8 @@ import pickle
 from tqdm import tqdm
 import os
 import warnings
+import torch
+import torchvision
 
 class ImageDataset():
     """
@@ -32,6 +34,7 @@ class ImageDataset():
     batch_size = 128
     repeat_size = 5
     shuffle = 128
+    validation_split = 0.2
 
 
     def __init__(self, dir=None, type=None):
@@ -54,6 +57,7 @@ class ImageDataset():
                 self.x_train = mnist.train.images
                 self.y_train = mnist.train.labels
                 self.x_train = self.x_train.astype(np.float32)
+
                 self.shape = list(self.x_train.shape)
                 print("Shape: ", self.shape)
                 self.num_classes = self.y_train.shape[1]
@@ -66,22 +70,52 @@ class ImageDataset():
                 self.x_test = mnist.test.images
                 self.y_test = mnist.test.labels
                 self.x_test = self.x_test.astype(np.float32)
+
+                print("Preprocessing train data...")
+                self.normalize_image_pixels(self.x_train)
+                print("Preprocessing test data...")
+                self.normalize_image_pixels(self.x_test)
+                print("Preprocessing validation data...")
+                self.normalize_image_pixels(self.x_valid)
+
             elif type == "TORCH_MNIST":
-                pass
+                self.train = torchvision.datasets.MNIST("./data", transform=None, download=True, train=True)
+                self.x_train = self.train.data.numpy()
+                self.y_train = self.train.targets.numpy()
+
+                self.shape = list(self.x_train.shape)
+                print("Shape: ", self.shape)
+                self.num_classes = len(set(self.y_train))
+                print("Unique Classes: ", self.num_classes)
+
+                self.test = torchvision.datasets.MNIST("./data", transform=None, download=True, train=False)
+                self.x_test = self.test.data.numpy()
+                self.y_test = self.test.targets.numpy()
+
+                print("Preprocessing train and validation data...")
+                self.normalize_image_pixels(self.x_train)
+                print("Preprocessing test data...")
+                self.normalize_image_pixels(self.x_test)
+
+                self.train = torch.utils.data.TensorDataset(torch.FloatTensor(self.x_train),
+                                                            torch.LongTensor(self.y_train))
+                self.test = torch.utils.data.TensorDataset(torch.FloatTensor(self.x_test),
+                                                            torch.LongTensor(self.y_test))
+                validation_size = int(self.validation_split * len(self.x_train))
+                train_size = len(self.x_train) - validation_size
+                self.train, self.validation = torch.utils.data.random_split(self.train, [train_size, validation_size])
+
             else:
                 raise Exception("Loading this dataset is not currently supported by the batch iterator")
 
-            print("Preprocessing train data...")
-            self.normalize_image_pixels(self.x_train)
-            print("Preprocessing test data...")
-            self.normalize_image_pixels(self.x_test)
-            print("Preprocessing validation data...")
-            self.normalize_image_pixels(self.x_valid)
 
             if batch_iter_load_type == "TF":
                 self.setup_tf_batch_iterator(self.x_train, self.y_train)
             elif batch_iter_load_type == "TORCH":
-                self.setup_torch_batch_iterator(self.x_train, self.y_train)
+                self.setup_torch_data_loaders()
+                self.x_valid, self.y_valid = [x[0] for x in iter(self.validation).next()]
+                self.x_valid = np.array(self.x_valid)
+                self.y_valid = np.array(self.y_valid)
             else:
                 raise Exception("Module not supported for this batch iterator...")
 
@@ -98,7 +132,7 @@ class ImageDataset():
             if batch_iter_load_type == "TF":
                 self.setup_tf_batch_iterator(self.x_train, self.y_train)
             elif batch_iter_load_type == "TORCH":
-                self.setup_torch_batch_iterator(self.x_train, self.y_train)
+                self.setup_torch_data_loaders()
             else:
                 raise Exception("Module not supported for this batch iterator...")
 
@@ -127,14 +161,15 @@ class ImageDataset():
         self.x_valid, self.y_valid = self.validation['features'], self.validation['labels']
         self.x_valid = self.x_valid.astype(np.float32)
 
-    def setup_torch_batch_iterator(self, features:np.ndarray, labels:np.ndarray):
+    def setup_torch_data_loaders(self):
         """
-        Constructs a PyTorch dataset from the features and labels and sets up the batch iterator
+        Constructs a PyTorch dataloader
 
-        :param np.ndarray features: the images of the dataset
-        :param np.ndarray labels: the labels for each feature
-        :return: None, the batch iterator is constructed from tensors and stored in class variables
+        :return: None, the dataloader is constructed from tensors and stored in class variables
         """
+        self.train = torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True)
+        self.validation = torch.utils.data.DataLoader(self.validation, batch_size=self.batch_size)
+        self.test = torch.utils.data.DataLoader(self.test, batch_size=self.batch_size)
 
     def setup_tf_batch_iterator(self, features:np.ndarray, labels:np.ndarray) -> None:
         """
@@ -315,15 +350,32 @@ if __name__ == "__main__":
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-    # Testing GTSRB
-    print("Testing GTSRB...")
-    path = "GTSRB/"
-    gtsrb = ImageDataset(path)
-    n_train = len(gtsrb.x_train)
-    n_valid = len(gtsrb.x_valid)
-    n_test = len(gtsrb.x_test)
-    image_shape = gtsrb.shape
-    n_classes = gtsrb.num_classes
+    # # Testing GTSRB
+    # print("Testing GTSRB...")
+    # path = "GTSRB/"
+    # gtsrb = ImageDataset(path)
+    # n_train = len(gtsrb.x_train)
+    # n_valid = len(gtsrb.x_valid)
+    # n_test = len(gtsrb.x_test)
+    # image_shape = gtsrb.shape
+    # n_classes = gtsrb.num_classes
+    #
+    # print("Number of training examples =", n_train)
+    # print("Number of testing examples =", n_test)
+    # print("Number of validation examples =", n_valid)
+    # print("Image data shape =", image_shape)
+    # print("Number of classes =", n_classes)
+    #
+    # print()
+
+    # Testing MNIST
+    print("Testing MNIST...")
+    mnist = ImageDataset(type="TF_MNIST")
+    n_train = len(mnist.x_train)
+    n_valid = len(mnist.x_valid)
+    n_test = len(mnist.x_test)
+    image_shape = mnist.shape
+    n_classes = mnist.num_classes
 
     print("Number of training examples =", n_train)
     print("Number of testing examples =", n_test)
@@ -333,12 +385,12 @@ if __name__ == "__main__":
 
     print()
 
-    # Testing MNIST
-    print("Testing MNIST...")
-    mnist = ImageDataset(type="TF_MNIST")
-    n_train = len(mnist.x_train)
-    n_valid = len(mnist.x_valid)
-    n_test = len(mnist.x_test)
+    # Testing PyTorch MNIST
+    print("Testing PyTorch MNIST...")
+    mnist = ImageDataset(type="TORCH_MNIST")
+    n_train = len(mnist.train.dataset)
+    n_valid = len(mnist.validation.dataset)
+    n_test = len(mnist.test.dataset)
     image_shape = mnist.shape
     n_classes = mnist.num_classes
 
